@@ -189,7 +189,7 @@ function Get-KSPAddon {
 		if ($URI.contains("kerbalstuff.com")) {
 			Write-Host -foreground yellow "Kerbalstuff.com is dead, searching spackdock.info."
 			$SearchResults = Search-SpaceDock -SearchString $($AVC.Name)
-			if ($SearchResults -gt 0) {
+			if ($SearchResults) {
 				$TryDownload = $($SearchResults.TryDownload)
 				$URI = $($SearchResults.URI)
 			}
