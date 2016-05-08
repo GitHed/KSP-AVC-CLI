@@ -188,7 +188,7 @@ $InstalledAddons = Get-ChildItem -Path $KSPInstallLocation\GameData -Include *.v
 Compare-KSPAddOns -InstalledAddon $InstalledAddons
 
 if ($StartKSP) {
-	if (Get-WmiObject Win32_OperatingSystem  | select OSArchitecture -eq "64-bit") {
+	if ((Get-WmiObject Win32_OperatingSystem | select OSArchitecture).OSArchitecture -eq "64-bit") {
 		$KSPEXE = "KSP_x64.exe"
 	} else {
 		$KSPEXE = "KSP.exe"
