@@ -19,12 +19,16 @@ function Compare-KSPAddOns {
 	)
 
 	begin {
+		$UpdateCount = 0
 	}
 
 	process {
 		ForEach ($InstalledAddon in $InstalledAddons) {
 			$JSONERROR = $False
 			write-host "Checking: $($InstalledAddon.Name)"
+
+			# Lots of addons have broken json files, try to fix those.
+			# Also change github links to raw content, I may regret this later.
 			try {
 				$LocalJSON = Get-Content -literalPath $InstalledAddon -Raw | Update-BrokenJSON | Update-GitHubLinks
 				$InstalledAddon_AVC = $LocalJSON | ConvertFrom-Json -ErrorAction SilentlyContinue
@@ -37,6 +41,9 @@ function Compare-KSPAddOns {
 				}
 				$JSONERROR = $True
 			}
+
+			# Try the URL's to get the latest version's JSON, and fix it if it's broken.
+			# Don't change this to github raw links.
 			try {
 				$WebJSON = Invoke-WebRequest -Uri ($InstalledAddon_AVC.url) | Update-BrokenJSON
 				$InternetAddon_AVC  = $WebJSON | ConvertFrom-Json -ErrorAction SilentlyContinue
@@ -49,8 +56,11 @@ function Compare-KSPAddOns {
 				}
 				$JSONERROR = $True
 			}
+
+			# If we didn't get a JSON loading error for either the local, or the internet, then lets proceed.
 			if (-not $JSONERROR) {
-				#Build Numbers
+				# Add build numbers of 0 if they don't have build numbers.
+				# This is just to make comparing them work easier.
 				if (-not (Get-Member -inputobject $InstalledAddon_AVC.Version -name "Build" -Membertype Properties)) {
 					$InstalledAddon_AVC.Version = $InstalledAddon_AVC.Version | Add-Member @{Build = 0} -PassThru
 				}
@@ -58,6 +68,7 @@ function Compare-KSPAddOns {
 					$InternetAddon_AVC.Version = $InternetAddon_AVC.Version | Add-Member @{Build = 0} -PassThru
 				}
 
+				# Compare the versions.
 				$Update = $False
 				$InstalledVersion = [version]"$($InstalledAddon_AVC.Version.Major).$($InstalledAddon_AVC.Version.Minor).$($InstalledAddon_AVC.Version.Patch).$($InstalledAddon_AVC.Version.Build)"
 				$InternetVersion  = [version]"$($InternetAddon_AVC.Version.Major).$($InternetAddon_AVC.Version.Minor).$($InternetAddon_AVC.Version.Patch).$($InternetAddon_AVC.Version.Build)"
@@ -65,6 +76,7 @@ function Compare-KSPAddOns {
 
 
 				if ($Update) {
+					$UpdateCount += 1
 					Write-Host -foreground yellow "Out of Date: $($InstalledAddon_AVC.Name)"
 					Write-Host -foreground yellow "Installed Version: $InstalledVersion"
 					Write-Host -foreground yellow "Latest Version: $InternetVersion"
@@ -87,7 +99,7 @@ function Compare-KSPAddOns {
 }
 
 
-
+# Fix simple broken JSON layout issues.
 function Update-BrokenJSON {
 	[CmdletBinding()]
 	Param (
@@ -122,6 +134,7 @@ function Update-BrokenJSON {
 	}
 }
 
+# Update github.com links to raw.githubusercontent.com
 function Update-GitHubLinks {
 	[CmdletBinding()]
 	Param (
@@ -143,6 +156,7 @@ function Update-GitHubLinks {
 	}
 }
 
+# Download an addon.
 function Get-KSPAddon {
 	[CmdletBinding()]
 	Param (
@@ -151,11 +165,13 @@ function Get-KSPAddon {
 	)
 
 	begin {
+		$TryDownload = $False
 	}
 
 	process {
 		$URI = $($AVC.Download)
-		if ($URI -match "spacedock.info") {
+		write-host $URI.contains("spacedock.info")
+		if ($URI.contains("spacedock.info")) {
 			$URI = "$URI/download/$($AVC.Version.Major).$($AVC.Version.Minor).$($AVC.Version.Patch)"
 			$OutFile = "$DownloadPath\$($AVC.Name)-$($AVC.Version.Major).$($AVC.Version.Minor).$($AVC.Version.Patch)"
 
@@ -166,11 +182,18 @@ function Get-KSPAddon {
 				}
 			}
 			$OutFile = "$OutFile.zip"
+
+			$TryDownload = $True
 		}
 
-		write-host -foreground green "Downloading: $URI"
-		Invoke-WebRequest -Uri $URI -OutFile $OutFile
-		write-host -foreground green "Saved to $OutFile"
+		if ($TryDownload) {
+			write-host -foreground green "Downloading: $URI"
+			Invoke-WebRequest -Uri $URI -OutFile $OutFile
+			write-host -foreground green "Saved to $OutFile"
+		} else {
+			write-host -foreground red "Can only download from Spacedock.info currently, sorry!"
+			write-host -foreground yellow "$URI"
+		}
 	}
 
 	end {
