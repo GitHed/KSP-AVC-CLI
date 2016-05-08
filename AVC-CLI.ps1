@@ -170,20 +170,38 @@ function Get-KSPAddon {
 
 	process {
 		$URI = $($AVC.Download)
-		write-host $URI.contains("spacedock.info")
-		if ($URI.contains("spacedock.info")) {
-			$URI = "$URI/download/$($AVC.Version.Major).$($AVC.Version.Minor).$($AVC.Version.Patch)"
-			$OutFile = "$DownloadPath\$($AVC.Name)-$($AVC.Version.Major).$($AVC.Version.Minor).$($AVC.Version.Patch)"
 
-			if (Get-Member -inputobject $AVC.Version -name "Build" -Membertype Properties) {
-				if ($AVC.Version.Build -ne 0) {
-					$OutFile = "$OutFile-$($AVC.Version.Build)"
-					$URI = "$URI-$($AVC.Version.Build)"
+		$URI = "$URI/download/$($AVC.Version.Major).$($AVC.Version.Minor).$($AVC.Version.Patch)"
+		$OutFile = "$DownloadPath\$($AVC.Name)-$($AVC.Version.Major).$($AVC.Version.Minor).$($AVC.Version.Patch)"
+
+		if (Get-Member -inputobject $AVC.Version -name "Build" -Membertype Properties) {
+			if ($AVC.Version.Build -ne 0) {
+				$OutFile = "$OutFile-$($AVC.Version.Build)"
+				$URI = "$URI-$($AVC.Version.Build)"
+			}
+		}
+		$OutFile = "$OutFile.zip"
+
+		if ($URI.contains("spacedock.info")) {
+			$TryDownload = $True
+		}
+
+		if ($URI.contains("kerbalstuff.com")) {
+			Write-Host -foreground yellow "Kerbalstuff.com is dead, searching spackdock.info."
+			$SearchURI = "https://spacedock.info/api/search/mod?query='$($AVC.Name)'"
+			$SearchResults = Invoke-WebRequest -Uri $SearchURI | ConvertFrom-Json
+			$SearchResults = $SearchResults | Where-Object { $_.Name -contains "$($AVC.Name)" }
+
+			if ($SearchResults) {
+				Write-Host -foreground yellow "Do you want to download this, $($SearchResults.Name) from the search results?"
+				do { $answer = Read-Host "y or n" } 
+				until ("y","n" -ccontains $answer)
+
+				if ($Answer.tolower() -eq "y") {
+					$TryDownload = $True
+					$URI = "https://spacedock.info$($SearchResults.versions[0].download_path)"
 				}
 			}
-			$OutFile = "$OutFile.zip"
-
-			$TryDownload = $True
 		}
 
 		if ($TryDownload) {
