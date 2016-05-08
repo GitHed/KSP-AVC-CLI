@@ -188,19 +188,10 @@ function Get-KSPAddon {
 
 		if ($URI.contains("kerbalstuff.com")) {
 			Write-Host -foreground yellow "Kerbalstuff.com is dead, searching spackdock.info."
-			$SearchURI = "https://spacedock.info/api/search/mod?query='$($AVC.Name)'"
-			$SearchResults = Invoke-WebRequest -Uri $SearchURI | ConvertFrom-Json
-			$SearchResults = $SearchResults | Where-Object { $_.Name -contains "$($AVC.Name)" }
-
-			if ($SearchResults) {
-				Write-Host -foreground yellow "Do you want to download this, $($SearchResults.Name) from the search results?"
-				do { $answer = Read-Host "y or n" } 
-				until ("y","n" -ccontains $answer)
-
-				if ($Answer.tolower() -eq "y") {
-					$TryDownload = $True
-					$URI = "https://spacedock.info$($SearchResults.versions[0].download_path)"
-				}
+			$SearchResults = Search-SpaceDock -SearchString $($AVC.Name)
+			if ($SearchResults -gt 0) {
+				$TryDownload = $($SearchResults.TryDownload)
+				$URI = $($SearchResults.URI)
 			}
 		}
 
@@ -218,6 +209,48 @@ function Get-KSPAddon {
 	}
 }
 
+
+function Search-SpaceDock {
+	[CmdletBinding()]
+	Param (
+		[Parameter(Mandatory=$True, ValueFromPipeline=$true)]
+		[String]$SearchString
+	)
+
+	begin {
+		$Output = @()
+	}
+
+	process {
+		$SearchURI = "https://spacedock.info/api/search/mod?query=" + $($SearchString)
+		$SearchResults = Invoke-WebRequest -Uri $SearchURI | ConvertFrom-Json
+		$SearchResults = $SearchResults | Where-Object { $_.Name -contains "$($SearchString)" }
+
+		if (-not ($SearchResults)) {
+			$SearchURI = "https://spacedock.info/api/search/mod?query='$($SearchString)'"
+			$SearchResults = Invoke-WebRequest -Uri $SearchURI | ConvertFrom-Json
+			$SearchResults = $SearchResults | Where-Object { $_.Name -contains "$($SearchString)" }		
+		}
+
+		ForEach($SearchResult in $SearchResults) {
+			Write-Host -foreground yellow "Do you want to download this, $($SearchResult.Name) from the search results?"
+			do { $answer = Read-Host "y or n" } 
+			until ("y","n" -ccontains $answer)
+
+			if ($Answer.tolower() -eq "y") {
+				$Props = @{
+					TryDownload = $True
+					URI = "https://spacedock.info$($SearchResult.versions[0].download_path)"
+				}
+				$Output += new-object psobject -Property $Props
+			}
+		}
+	}
+
+	end {
+		write-output $Output
+	}
+}
 
 
 write-verbose "Finding KSP"
