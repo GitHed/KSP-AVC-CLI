@@ -171,42 +171,69 @@ function Get-KSPAddon {
 	process {
 		$URI = $($AVC.Download)
 
-		$URI = "$URI/download/$($AVC.Version.Major).$($AVC.Version.Minor).$($AVC.Version.Patch)"
-		$OutFile = "$DownloadPath\$($AVC.Name)-$($AVC.Version.Major).$($AVC.Version.Minor).$($AVC.Version.Patch)"
+		$OutFile = $AVC.Name | Remove-InvalidFileNameChars
+		$OutFile = "$DownloadPath\$($OutFile)"
 
-		if (Get-Member -inputobject $AVC.Version -name "Build" -Membertype Properties) {
-			if ($AVC.Version.Build -ne 0) {
-				$OutFile = "$OutFile-$($AVC.Version.Build)"
-				$URI = "$URI-$($AVC.Version.Build)"
+		if ($URI -ne $Null) {
+			if ($URI.contains("spacedock.info")) {
+				$APIURI = $URI -replace [regex]"https*:\/\/spacedock.info\/", "https://spacedock.info/api/"
+				$APIURI = $APIURI -replace [regex]"\/mod\/([\d]*).*", '/mod/${1}/latest'
+				$SpaceDockJSON = Invoke-WebRequest -Uri $APIURI | ConvertFrom-Json
+				$URI = "https://spacedock.info$($SpaceDockJSON.download_path)"
+				$OutFile = "$($OutFile)-$($SpaceDockJSON.friendly_version)"
+				$TryDownload = $True
 			}
-		}
-		$OutFile = "$OutFile.zip"
 
-		if ($URI.contains("spacedock.info")) {
-			$TryDownload = $True
-		}
-
-		if ($URI.contains("kerbalstuff.com")) {
-			Write-Host -foreground yellow "Kerbalstuff.com is dead, searching spackdock.info."
-			$SearchResults = Search-SpaceDock -SearchString $($AVC.Name)
-			if ($SearchResults) {
-				$TryDownload = $($SearchResults.TryDownload)
-				$URI = $($SearchResults.URI)
+			if ($URI.contains("kerbalstuff.com")) {
+				Write-Host -foreground yellow "Kerbalstuff.com is dead, searching spackdock.info."
+				$SearchResults = Search-SpaceDock -SearchString $($AVC.Name)
+				if ($SearchResults) {
+					$TryDownload = $($SearchResults.TryDownload)
+					$URI = $($SearchResults.URI)
+					$OutFile = "$($OutFile)-$($SearchResults.friendly_version)"
+				}
 			}
-		}
 
-		if ($TryDownload) {
-			write-host -foreground green "Downloading: $URI"
-			Invoke-WebRequest -Uri $URI -OutFile $OutFile
-			write-host -foreground green "Saved to $OutFile"
+			if ($URI.contains("curseforge.com")) {
+				$OutFile = "$($OutFile)-$($AVC.Version.Major).$($AVC.Version.Minor).$($AVC.Version.Patch)"
+				if (Get-Member -inputobject $AVC.Version -name "Build" -Membertype Properties) {
+					if ($AVC.Version.Build -ne 0) {
+						$OutFile = "$OutFile-$($AVC.Version.Build)"
+					}
+				}
+				$URI = "$URI/files/latest"
+				$TryDownload = $True
+			}
+
+			$OutFile = "$($OutFile).zip"
+
+			if ($TryDownload) {
+				write-host -foreground green "Downloading: $URI"
+				Invoke-WebRequest -Uri $URI -OutFile $OutFile
+				write-host -foreground green "Saved to $OutFile"
+			} else {
+				write-host -foreground red "Can only download from Spacedock.info currently, sorry!"
+				write-host -foreground yellow "$URI"
+			}
 		} else {
-			write-host -foreground red "Can only download from Spacedock.info currently, sorry!"
-			write-host -foreground yellow "$URI"
+			write-host -foreground red "Addon has no download url available via the version file."
 		}
 	}
 
 	end {
 	}
+}
+
+
+Function Remove-InvalidFileNameChars {
+	param(
+		[Parameter(Mandatory=$true,	Position=0,	ValueFromPipeline=$true, ValueFromPipelineByPropertyName=$true)]
+		[String]$Name
+	)
+
+	$invalidChars = [IO.Path]::GetInvalidFileNameChars() -join ''
+	$re = "[{0}]" -f [RegEx]::Escape($invalidChars)
+	Write-Output ($Name -replace $re)
 }
 
 
@@ -241,6 +268,7 @@ function Search-SpaceDock {
 				$Props = @{
 					TryDownload = $True
 					URI = "https://spacedock.info$($SearchResult.versions[0].download_path)"
+					friendly_version = $($SearchResult.versions[0].friendly_version)
 				}
 				$Output += new-object psobject -Property $Props
 			}
